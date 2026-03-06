@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Критерии - Система оценки персонала</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Критерии оценки</h1>
+  </header>
+
+  <nav>
+    <a href="employees.html">Сотрудники</a>
+    <a href="criteria.html" class="active">Критерии</a>
+    <a href="evaluate.html">Оценка</a> 
+    <a href="reports.html">Отчёты</a>
+    <a href="#" onclick="logout(); return false;">Выход</a>
+  </nav>
+
+  <main>
+    <div class="toolbar">
+      <button onclick="showAddCriterionModal()">Добавить критерий</button>
+      <button onclick="loadCriteria()">Обновить</button>
+    </div>
+
+    <table id="criteriaTable">
+      <thead>
+        <tr>
+          <th>Название</th>
+          <th>Категория</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Данные загружаются через JavaScript -->
+      </tbody>
+    </table>
+  </main>
+
+  <!-- Модальное окно для добавления/редактирования -->
+  <div id="addCriterionModal" class="modal hidden">
+    <div class="modal-content">
+      <h2 id="modalTitle">Добавить критерий</h2>
+      <form onsubmit="handleSaveCriterion(event)">
+        <input type="hidden" id="criterionId" />
+        
+        <div class="form-group">
+          <label for="criterionName">Название *</label>
+          <input type="text" id="criterionName" required placeholder="Например: Ответственность" />
+        </div>
+
+        <div class="form-group">
+          <label for="category">Категория</label>
+          <select id="category">
+            <option value="1">Деловые</option>
+            <option value="2">Личностные</option>
+          </select>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit">Сохранить</button>
+          <button type="button" onclick="closeAddCriterionModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+  if (!checkPageAccess(['admin', 'HR'])) {
+    // Уже перенаправлено
+  }
+  
+  document.addEventListener('DOMContentLoaded', updateNavigation)
+</script>
+
+  <!-- Подключение скриптов -->
+  <script src="js/auth.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
+  <script>
+    let criteria = []
+    let categories = []
+    let editingCriterionId = null
+
+    // Загрузка данных при старте страницы
+    async function loadCriteria() {
+      try {
+        await checkAuth()
+        categories = await api.getCategories()
+        criteria = await api.getCriteria()
+        renderCriteriaTable()
+      } catch (error) {
+        showError('Ошибка загрузки данных: ' + error.message)
+      }
+    }
+
+    // Отображение таблицы критериев
+    function renderCriteriaTable() {
+      const tbody = document.querySelector('#criteriaTable tbody')
+      if (!tbody) return
+
+      tbody.innerHTML = ''
+
+      if (criteria.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">Критериев нет</td></tr>'
+        return
+      }
+
+      criteria.forEach(criterion => {
+        const row = document.createElement('tr')
+        const categoryName = criterion.category ? criterion.category.name : '—'
+        row.innerHTML = `
+          <td>${criterion.name || '—'}</td>
+          <td>${categoryName}</td>
+          <td>
+            <button onclick="editCriterion(${criterion.id})" class="btn btn-sm">Редактировать</button>
+            <button onclick="deleteCriterion(${criterion.id})" class="btn btn-sm danger">Удалить</button>
+          </td>
+        `
+        tbody.appendChild(row)
+      })
+    }
+
+    // Показать модальное окно добавления
+    function showAddCriterionModal() {
+      editingCriterionId = null
+      document.getElementById('modalTitle').textContent = 'Добавить критерий'
+      document.getElementById('criterionId').value = ''
+      document.getElementById('criterionName').value = ''
+      document.getElementById('category').value = '1'
+      document.getElementById('addCriterionModal').classList.remove('hidden')
+    }
+
+    // Закрыть модальное окно
+    function closeAddCriterionModal() {
+      document.getElementById('addCriterionModal').classList.add('hidden')
+      editingCriterionId = null
+    }
+
+    // Редактирование критерия
+    async function editCriterion(id) {
+      const criterion = criteria.find(c => c.id === id)
+      if (!criterion) return
+
+      editingCriterionId = id
+      document.getElementById('modalTitle').textContent = 'Редактировать критерий'
+      document.getElementById('criterionId').value = criterion.id
+      document.getElementById('criterionName').value = criterion.name || ''
+      document.getElementById('category').value = criterion.categoryId || '1'
+      document.getElementById('addCriterionModal').classList.remove('hidden')
+    }
+
+    // Сохранение критерия (добавление или обновление)
+    async function handleSaveCriterion(event) {
+      event.preventDefault()
+
+      const criterionData = {
+        name: document.getElementById('criterionName').value,
+        categoryId: parseInt(document.getElementById('category').value)
+      }
+
+      try {
+        if (editingCriterionId) {
+          // Обновление существующего
+          await api.updateCriterion(editingCriterionId, criterionData)
+          showToast('Критерий обновлён')
+        } else {
+          // Добавление нового
+          await api.createCriterion(criterionData)
+          showToast('Критерий добавлен')
+        }
+        closeAddCriterionModal()
+        await loadCriteria()
+      } catch (error) {
+        showError('Ошибка сохранения: ' + error.message)
+      }
+    }
+
+    // Удаление критерия
+    async function deleteCriterion(id) {
+      if (!confirm('Вы уверены, что хотите удалить этот критерий?')) return
+
+      try {
+        await api.deleteCriterion(id)
+        showToast('Критерий удалён')
+        await loadCriteria()
+      } catch (error) {
+        showError('Ошибка удаления: ' + error.message)
+      }
+    }
+
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', loadCriteria)
+  </script>
+
+  <footer>
+    © Друзенко А.С., 2026
+  </footer>
+</body>
+</html>

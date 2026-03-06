@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Оценка сотрудников - Система оценки персонала</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Оценка сотрудников</h1>
+  </header>
+
+  <nav>
+    <a href="employees.html">Сотрудники</a>
+    <a href="criteria.html">Критерии</a>
+    <a href="evaluate.html" class="active">Оценка</a>
+    <a href="reports.html">Отчёты</a>
+    <a href="#" onclick="logout(); return false;">Выход</a>
+  </nav>
+
+  <main>
+    <div class="form-group">
+      <label for="employeeSelect">Выберите сотрудника для оценки:</label>
+      <select id="employeeSelect" onchange="loadEmployeeCriteria()">
+        <option value="">— Выберите сотрудника —</option>
+      </select>
+    </div>
+
+    <div id="evaluationForm" class="hidden">
+      <h2>Критерии оценки</h2>
+      <table id="criteriaTable">
+        <thead>
+          <tr>
+            <th>Критерий</th>
+            <th>Категория</th>
+            <th>Оценка (1-5)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Загружается через JavaScript -->
+        </tbody>
+      </table>
+      
+      <div style="margin-top: 2rem;">
+        <button onclick="saveEvaluations()" class="btn">💾 Сохранить оценки</button>
+        <button onclick="resetEvaluations()" class="btn" style="background-color: #e74c3c;">🗑️ Сбросить оценки</button>
+        <button onclick="loadEmployeeCriteria()" class="btn" style="background-color: #95a5a6;">🔄 Обновить</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Подключение скриптов -->
+  <script src="js/auth.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  
+  <script>
+    let employees = []
+    let criteria = []
+    let existingEvaluations = []
+    let currentEmployeeId = null
+
+    // Загрузка данных при старте
+    async function init() {
+      try {
+        await checkAuth()
+        employees = await api.getEmployeesBasic()
+        criteria = await api.getCriteriaPublic()
+        populateEmployeeSelect()
+      } catch (error) {
+        showError('Ошибка загрузки данных: ' + error.message)
+      }
+    }
+
+    // Заполнение списка сотрудников
+    function populateEmployeeSelect() {
+      const select = document.getElementById('employeeSelect')
+      employees.forEach(emp => {
+        const option = document.createElement('option')
+        option.value = emp.id
+        option.textContent = `${emp.fullName} (${emp.position})`
+        select.appendChild(option)
+      })
+    }
+
+    // Загрузка критериев для выбранного сотрудника
+    async function loadEmployeeCriteria() {
+      const employeeId = document.getElementById('employeeSelect').value
+      if (!employeeId) {
+        document.getElementById('evaluationForm').classList.add('hidden')
+        return
+      }
+
+      currentEmployeeId = parseInt(employeeId)
+      document.getElementById('evaluationForm').classList.remove('hidden')
+
+      try {
+        // Получаем существующие оценки
+        existingEvaluations = await api.getEvaluationsPublic(currentEmployeeId)
+        renderCriteriaTable()
+      } catch (error) {
+        showError('Ошибка загрузки оценок: ' + error.message)
+      }
+    }
+
+    // Отображение таблицы критериев
+    function renderCriteriaTable() {
+      const tbody = document.querySelector('#criteriaTable tbody')
+      tbody.innerHTML = ''
+
+      criteria.forEach(criterion => {
+        // Ищем существующую оценку для этого критерия
+        const existingEval = existingEvaluations.find(e => e.criterionId === criterion.id)
+        const existingScore = existingEval ? existingEval.score : ''
+        const evaluationId = existingEval ? existingEval.id : null
+
+        const row = document.createElement('tr')
+        const categoryName = criterion.category ? criterion.category.name : '—'
+        
+        row.innerHTML = `
+          <td><strong>${criterion.name}</strong></td>
+          <td>${categoryName}</td>
+          <td>
+            <input type="number" 
+                   data-criterion-id="${criterion.id}"
+                   data-evaluation-id="${evaluationId || ''}"
+                   min="1" 
+                   max="5" 
+                   value="${existingScore}"
+                   class="score-input"
+                   style="width: 80px; padding: 0.5rem;" />
+          </td>
+        `
+        tbody.appendChild(row)
+      })
+    }
+
+    // Сохранение оценок
+    async function saveEvaluations() {
+      const inputs = document.querySelectorAll('.score-input')
+      let successCount = 0
+      let errorCount = 0
+
+      for (const input of inputs) {
+        const criterionId = parseInt(input.dataset.criterionId)
+        const evaluationId = input.dataset.evaluationId ? parseInt(input.dataset.evaluationId) : null
+        const score = parseInt(input.value)
+
+        // Пропускаем пустые поля
+        if (!score || score < 1 || score > 5) {
+          continue
+        }
+
+        try {
+          if (evaluationId) {
+            // Обновляем существующую оценку
+            await api.updateEvaluation(evaluationId, { score })
+          } else {
+            // Создаём новую оценку
+            await api.createEvaluation({
+              employeeId: currentEmployeeId,
+              criterionId: criterionId,
+              score: score
+            })
+          }
+          successCount++
+        } catch (error) {
+          console.error('Ошибка сохранения оценки:', error)
+          errorCount++
+        }
+      }
+
+      if (successCount > 0) {
+        showToast(`Сохранено ${successCount} оценок`)
+        // Перезагружаем данные
+        await loadEmployeeCriteria()
+      }
+      
+      if (errorCount > 0) {
+        showError(`Не удалось сохранить ${errorCount} оценок`)
+      }
+      
+      if (successCount === 0 && errorCount === 0) {
+        showError('Введите хотя бы одну оценку от 1 до 5')
+      }
+    }
+
+    // Сброс оценок (удаление всех оценок сотрудника)
+    async function resetEvaluations() {
+      if (!currentEmployeeId) return
+
+      if (!confirm('Вы уверены, что хотите удалить ВСЕ оценки этого сотрудника? Это действие нельзя отменить!')) {
+        return
+      }
+
+      try {
+        // Удаляем все существующие оценки
+        let deletedCount = 0
+        for (const eval of existingEvaluations) {
+          if (eval.id) {
+            await api.deleteEvaluation(eval.id)
+            deletedCount++
+          }
+        }
+
+        // Очищаем локальный массив
+        existingEvaluations = []
+
+        // Очищаем поля ввода
+        const inputs = document.querySelectorAll('.score-input')
+        inputs.forEach(input => {
+          input.value = ''
+          input.dataset.evaluationId = ''
+        })
+
+        showToast(`Удалено ${deletedCount} оценок`)
+      } catch (error) {
+        showError('Ошибка сброса оценок: ' + error.message)
+      }
+    }
+
+    // Инициализация
+    document.addEventListener('DOMContentLoaded', init)
+  </script>
+
+  <footer>
+    © Друзенко А.С., 2026
+  </footer>
+</body>
+</html>

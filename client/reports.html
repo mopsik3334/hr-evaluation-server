@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Отчёты - Система оценки персонала</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Отчёты по оценке сотрудников</h1>
+  </header>
+
+  <nav>
+    <a href="employees.html">Сотрудники</a>
+    <a href="criteria.html">Критерии</a>
+    <a href="evaluate.html">Оценка</a>
+    <a href="reports.html" class="active">Отчёты</a>
+    <a href="#" onclick="logout(); return false;">Выход</a>
+  </nav>
+
+  <main>
+    <div class="form-group">
+      <label for="employeeSelect">Выберите сотрудника для отчёта:</label>
+      <select id="employeeSelect" onchange="loadEmployeeReport()">
+        <option value="">— Выберите сотрудника —</option>
+      </select>
+    </div>
+
+    <div id="reportContent" class="hidden">
+      <h2 id="employeeName"></h2>
+      
+      <div class="diagram-container">
+        <div>
+          <h3>Радарная диаграмма</h3>
+          <canvas id="radarChart"></canvas>
+        </div>
+        <div>
+          <h3>Столбчатая диаграмма</h3>
+          <canvas id="barChart"></canvas>
+        </div>
+      </div>
+
+      <div style="margin-top: 2rem;">
+        <h3>Детальная оценка</h3>
+        <table id="reportTable">
+          <thead>
+            <tr>
+              <th>Критерий</th>
+              <th>Категория</th>
+              <th>Оценка</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Данные загружаются через JavaScript -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="lib/chart.4.4.3.min.js"></script>
+
+  <!-- Подключение скриптов -->
+  <script src="js/auth.js"></script>
+  <script src="js/api.js"></script> 
+  <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
+  
+  <script>
+    let employees = []
+    let criteria = []
+    let evaluations = []
+    let radarChartInstance = null
+    let barChartInstance = null
+
+    // Загрузка данных при старте страницы
+    async function init() {
+  try {
+    // Проверяем авторизацию
+    const token = localStorage.getItem('token')
+    if (!token) {
+      window.location.href = 'index.html'
+      return
+    }
+
+    // Загружаем сотрудников (публичный эндпоинт)
+    employees = await api.getEmployeesBasic()
+    
+    // Загружаем критерии (публичный эндпоинт)
+    criteria = await api.getCriteriaPublic()
+    
+    // Заполняем выпадающий список
+    populateEmployeeSelect()
+  } catch (error) {
+    console.error('Ошибка загрузки данных:', error)
+    showError('Ошибка загрузки данных: ' + error.message)
+  }
+}
+    // Заполнение выпадающего списка сотрудников
+    function populateEmployeeSelect() {
+      const select = document.getElementById('employeeSelect')
+      select.innerHTML = '<option value="">— Выберите сотрудника —</option>'
+      
+      employees.forEach(employee => {
+        const option = document.createElement('option')
+        option.value = employee.id
+        option.textContent = `${employee.fullName} (${employee.position})`
+        select.appendChild(option)
+      })
+    }
+
+    // Загрузка отчёта по сотруднику
+    async function loadEmployeeReport() {
+  const employeeId = document.getElementById('employeeSelect').value
+  if (!employeeId) {
+    document.getElementById('reportContent').classList.add('hidden')
+    return
+  }
+
+  try {
+    const employee = employees.find(e => e.id == employeeId)
+    document.getElementById('employeeName').textContent = employee.fullName
+    
+    // Получаем оценки (публичный эндпоинт)
+    evaluations = await api.getEvaluationsPublic(employeeId)
+    
+    // Создаем карту оценок по criterionId
+    const evaluationMap = {}
+    evaluations.forEach(eval => {
+      evaluationMap[eval.criterionId] = eval.score
+    })
+
+    // Заполняем таблицу
+    renderReportTable(evaluationMap)
+    
+    // Строим диаграммы
+    renderCharts(evaluationMap)
+    
+    document.getElementById('reportContent').classList.remove('hidden')
+  } catch (error) {
+    console.error('Ошибка загрузки отчёта:', error)
+    showError('Ошибка загрузки отчёта: ' + error.message)
+  }
+}
+    // Отображение таблицы отчёта
+    function renderReportTable(evaluationMap) {
+      const tbody = document.querySelector('#reportTable tbody')
+      tbody.innerHTML = ''
+
+      criteria.forEach(criterion => {
+        const row = document.createElement('tr')
+        const score = evaluationMap[criterion.id]
+        const categoryName = criterion.category ? criterion.category.name : '—'
+        
+        row.innerHTML = `
+          <td>${criterion.name}</td>
+          <td>${categoryName}</td>
+          <td>${score !== undefined ? score + ' из 5' : '—'}</td>
+        `
+        tbody.appendChild(row)
+      })
+    }
+
+    // Построение диаграмм
+    function renderCharts(evaluationMap) {
+      // Подготавливаем данные для диаграмм
+      const labels = criteria.map(c => c.name)
+      const data = criteria.map(c => evaluationMap[c.id] || 0)
+
+      // Уничтожаем старые диаграммы
+      if (radarChartInstance) {
+        radarChartInstance.destroy()
+        radarChartInstance = null
+      }
+      if (barChartInstance) {
+        barChartInstance.destroy()
+        barChartInstance = null
+      }
+
+      // Строим радарную диаграмму
+      const radarCtx = document.getElementById('radarChart').getContext('2d')
+      radarChartInstance = new Chart(radarCtx, {
+        type: 'radar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Профиль качеств',
+            data: data,
+            backgroundColor: 'rgba(52, 152, 219, 0.2)',
+            borderColor: 'rgba(52, 152, 219, 1)',
+            pointBackgroundColor: 'rgba(52, 152, 219, 1)',
+            pointBorderColor: '#fff',
+            pointHoverBackgroundColor: '#fff',
+            pointHoverBorderColor: 'rgba(52, 152, 219, 1)'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            r: {
+              beginAtZero: true,
+              max: 5,
+              angleLines: {
+                display: true
+              },
+              pointLabels: {
+                font: {
+                  size: 10
+                }
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top'
+            }
+          }
+        }
+      })
+
+      // Строим столбчатую диаграмму
+      const barCtx = document.getElementById('barChart').getContext('2d')
+      barChartInstance = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Итоговые баллы',
+            data: data,
+            backgroundColor: 'rgba(52, 152, 219, 0.6)',
+            borderColor: 'rgba(52, 152, 219, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 5,
+              ticks: {
+                stepSize: 1
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top'
+            }
+          }
+        }
+      })
+    }
+
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', init)
+  </script>
+
+  <footer>
+    © Друзенко А.С., 2026
+  </footer>
+</body>
+</html>

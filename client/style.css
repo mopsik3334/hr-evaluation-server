@@ -1,0 +1,126 @@
+:root {
+  --primary: #2c3e50;
+  --accent: #3498db;
+  --success: #2ecc71;
+  --danger: #e74c3c;
+  --bg: #f9f9f9;
+  --text: #333;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  padding: 0;
+  margin: 0;
+}
+header {
+  background-color: var(--primary);
+  color: white;
+  padding: 1rem;
+  text-align: center;
+}
+nav {
+  background-color: #34495e;
+  padding: 0.75rem;
+}
+nav a {
+  color: white;
+  text-decoration: none;
+  margin: 0 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+}
+nav a:hover, nav a.active {
+  background-color: var(--accent);
+}
+main {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.hidden {
+  display: none;
+}
+.form-group {
+  margin-bottom: 1rem;
+}
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+input, select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+button {
+  background-color: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 0.5rem;
+}
+button:hover {
+  opacity: 0.9;
+}
+button.danger {
+  background-color: var(--danger);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+th, td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+th {
+  background-color: #ecf0f1;
+}
+.diagram-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+@media (max-width: 768px) {
+  .diagram-container {
+    grid-template-columns: 1fr;
+  }
+  nav a {
+    display: block;
+    margin: 0.25rem 0;
+  }
+}
+footer {
+  text-align: center;
+  padding: 1rem;
+  background-color: #ecf0f1;
+  margin-top: 2rem;
+  font-size: 0.9rem;
+}
+.notification {
+  padding: 0.75rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+.notification.success {
+  background-color: #d5f5e3;
+  border-left: 4px solid var(--success);
+}
+.notification.error {
+  background-color: #f9e7e7;
+  border-left: 4px solid var(--danger);
+}
